@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solucionar problemas de sistema</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#1e1b4b',
+                            950: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .lightbox-open { overflow: hidden; }
+    </style>
+</head>
+<body class="h-full text-slate-100 bg-slate-950 custom-scrollbar selection:bg-brand-600 selection:text-white">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Confirmation Modal Modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+        <div class="glass-panel max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-700 animate-in fade-in zoom-in duration-200">
+            <div class="flex items-center gap-4 text-amber-400 mb-4">
+                <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-title" class="text-lg font-bold text-white">Confirmar Acción</h3>
+                    <p id="confirm-msg" class="text-xs text-slate-400">¿Estás seguro de realizar esta acción?</p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button id="confirm-cancel-btn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm transition">Cancelar</button>
+                <button id="confirm-action-btn" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition shadow-lg shadow-red-600/30">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Maintenance View Overlay -->
+    <div id="maintenance-screen" class="fixed inset-0 z-40 bg-slate-950 flex flex-col items-center justify-center p-6 text-center hidden">
+        <div class="w-24 h-24 rounded-3xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-5xl mb-6 border border-amber-500/20 shadow-2xl animate-pulse">
+            <i class="fa-solid fa-screwdriver-wrench"></i>
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3">Plataforma en Mantenimiento</h1>
+        <p class="text-slate-400 max-w-md text-sm sm:text-base mb-8">
+            Estamos optimizando y mejorando nuestros sistemas informáticos para ofrecerte un servicio más seguro y rápido. Por favor, vuelve más tarde.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button onclick="app.logout()" class="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-right-from-bracket"></i> Cerrar Sesión
+            </button>
+            <button onclick="app.checkCreatorBypass()" class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-medium text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-brand-600/30">
+                <i class="fa-solid fa-user-shield"></i> Acceso Creador
+            </button>
+        </div>
+    </div>
+
+    <!-- Image / Video Lightbox -->
+    <div id="lightbox-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <button onclick="app.closeLightbox()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl w-12 h-12 flex items-center justify-center rounded-full bg-slate-800/80 transition">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div id="lightbox-content" class="max-w-5xl max-h-[90vh] w-full flex items-center justify-center overflow-hidden rounded-2xl"></div>
+    </div>
+
+    <!-- MAIN ROOT CONTAINER -->
+    <div id="app-root" class="min-h-screen flex flex-col"></div>
+
+    <!-- APPLICATION JAVASCRIPT LOGIC -->
+    <script>
+        // SHA-256 Hashing helper using Web Crypto API
+        async function hashString(str) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(str);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // INITIAL SEED DATA & LOCALSTORAGE LOGIC
+        const DEFAULT_CATEGORIES = [
+            "Microsoft Word",
+            "Microsoft Excel",
+            "Microsoft PowerPoint",
+            "Windows 10",
+            "Windows 11",
+            "Sistemas informáticos",
+            "Problemas de computadoras",
+            "Programas y aplicaciones",
+            "Internet y conectividad",
+            "Soluciones de errores informáticos"
+        ];
+
+        const SAMPLE_TUTORIALS = [
+            {
+                id: "tut-1",
+                title: "Reparar error de cálculo de fórmulas en Microsoft Excel",
+                category: "Microsoft Excel",
+                description: "Solución paso a paso cuando las fórmulas no se calculan automáticamente o muestran el código en lugar del resultado.",
+                status: "VISIBLE",
+                author: "DELFI FABIAN MARTINEZ",
+                createdAt: "2026-03-10",
+                steps: [
+                    {
+                        title: "Verificar opciones de cálculo de libro",
+                        content: "Abre Excel y ve a la pestaña 'Fórmulas' en la barra superior. Busca la sección 'Cálculo' y haz clic en 'Opciones de cálculo'. Asegúrate de que la opción esté marcada en 'Automático' y no en 'Manual'.",
+                        image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
+                        video: ""
+                    },
+                    {
+                        title: "Verificar el formato de celda",
+                        content: "Si la fórmula aparece como texto, selecciona la celda, haz clic derecho y elige 'Formato de celdas'. Cámbialo de 'Texto' a 'General'. Luego presiona F2 en la celda y Enter para recargar la fórmula.",
+                        image: "",
+                        video: ""
+                    }
+                ]
+            },
+            {
+                id: "tut-2",
+                title: "Acelerar e optimizar el inicio en Windows 11",
+                category: "Windows 11",
+                description: "Aprende a desactivar programas innecesarios que se ejecutan en segundo plano al encender tu PC.",
+                status: "VISIBLE",
+                author: "DELFI FABIAN MARTINEZ",
+                createdAt: "2026-03-12",
+                steps: [
+                    {
+                        title: "Abrir el Administrador de Tareas",
+                        content: "Presiona la combinación de teclas Ctrl + Shift + Esc para abrir el Administrador de Tareas. Haz clic en 'Más detalles' si se muestra en modo reducido.",
+                        image: "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=800&q=80",
+                        video: ""
+                    },
+                    {
+                        title: "Deshabilitar aplicaciones de inicio",
+                        content: "Navega a la pestaña 'Aplicaciones de arranque' o 'Inicio'. Selecciona las aplicaciones de alto impacto que no necesites al encender (como chats o actualizadores) y haz clic en 'Deshabilitar'.",
+                        image: "",
+                        video: ""
+                    }
+                ]
+            },
+            {
+                id: "tut-3",
+                title: "Solucionar fallo de conexión DNS y acceso a Internet",
+                category: "Internet y conectividad",
+                description: "Pasos definitivos para resolver el error 'Servidor DNS no responde' o páginas que no cargan.",
+                status: "VISIBLE",
+                author: "DELFI FABIAN MARTINEZ",
+                createdAt: "2026-03-15",
+                steps: [
+                    {
+                        title: "Vaciar la caché de DNS por consola",
+                        content: "Presiona la tecla Windows, escribe 'cmd', haz clic derecho y selecciona 'Ejecutar como Administrador'. En la consola escribe: ipconfig /flushdns y presiona Enter.",
+                        image: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=800&q=80",
+                        video: ""
+                    },
+                    {
+                        title: "Cambiar los DNS a Google / Cloudflare",
+                        content: "Ve a Configuración de Red > Cambiar opciones del adaptador > Propiedades de Wi-Fi o Ethernet > Protocolo IPv4. Asigna los DNS primarios 8.8.8.8 y secundarios 8.8.4.4.",
+                        image: "",
+                        video: ""
+                    }
+                ]
+            }
+        ];
+
+        // MAIN APPLICATION CLASS
+        class AppSystem {
+            constructor() {
+                this.state = {
+                    currentUser: null,
+                    users: [],
+                    categories: [],
+                    tutorials: [],
+                    logs: [],
+                    settings: { maintenanceMode: false },
+                    currentView: 'login', // 'login', 'register', 'forgot_password', 'app'
+                    appTab: 'library', // 'library', 'creator_panel', 'tutorial_detail', 'tutorial_editor'
+                    selectedTutorial: null,
+                    editingTutorialId: null,
+                    searchQuery: '',
+                    selectedCategory: 'ALL',
+                    forgotStep: 1,
+                    forgotPhone: '',
+                    // Admin subtab
+                    creatorTab: 'users' // 'users', 'tutorials', 'categories', 'logs', 'settings'
+                };
+
+                this.creatorInitCredentials = {
+                    name: "DELFI FABIAN",
+                    surname: "MARTINEZ",
+                    phone: "0000000000",
+                    plainPass: "fabian58M@12"
+                };
+
+                this.init();
+            }
+
+            async init() {
+                await this.loadData();
+                this.checkSession();
+                this.render();
+            }
+
+            async loadData() {
+                // Load or seed settings
+                const settingsData = localStorage.getItem('sp_settings');
+                if (settingsData) {
+                    this.state.settings = JSON.parse(settingsData);
+                } else {
+                    this.saveSettings();
+                }
+
+                // Load or seed categories
+                const categoriesData = localStorage.getItem('sp_categories');
+                if (categoriesData) {
+                    this.state.categories = JSON.parse(categoriesData);
+                } else {
+                    this.state.categories = [...DEFAULT_CATEGORIES];
+                    this.saveCategories();
+                }
+
+                // Load or seed tutorials
+                const tutorialsData = localStorage.getItem('sp_tutorials');
+                if (tutorialsData) {
+                    this.state.tutorials = JSON.parse(tutorialsData);
+                } else {
+                    this.state.tutorials = [...SAMPLE_TUTORIALS];
+                    this.saveTutorials();
+                }
+
+                // Load or seed logs
+                const logsData = localStorage.getItem('sp_logs');
+                if (logsData) {
+                    this.state.logs = JSON.parse(logsData);
+                } else {
+                    this.state.logs = [
+                        { id: 'log-1', timestamp: new Date().toLocaleString(), user: 'Sistema', action: 'Inicialización de Plataforma de Soporte' }
+                    ];
+                    this.saveLogs();
+                }
+
+                // Load or seed users (Ensuring Creator exists)
+                const usersData = localStorage.getItem('sp_users');
+                let usersList = usersData ? JSON.parse(usersData) : [];
+
+                // Check Creator User presence
+                const creatorHash = await hashString(this.creatorInitCredentials.plainPass);
+                const creatorIndex = usersList.findIndex(u => 
+                    u.name.trim().toUpperCase() === this.creatorInitCredentials.name &&
+                    u.surname.trim().toUpperCase() === this.creatorInitCredentials.surname
+                );
+
+                if (creatorIndex === -1) {
+                    const creatorUser = {
+                        id: 'creator-main',
+                        name: this.creatorInitCredentials.name,
+                        surname: this.creatorInitCredentials.surname,
+                        phone: this.creatorInitCredentials.phone,
+                        passwordHash: creatorHash,
+                        role: 'CREATOR',
+                        status: 'ACTIVE',
+                        permissions: {
+                            canUploadMedia: true,
+                            canCreateTutorials: true,
+                            canEditTutorials: true,
+                            canManageCategories: true
+                        },
+                        createdAt: new Date().toISOString().split('T')[0]
+                    };
+                    usersList.unshift(creatorUser);
+                } else {
+                    // Force ensure CREATOR role and permissions
+                    usersList[creatorIndex].role = 'CREATOR';
+                    usersList[creatorIndex].status = 'ACTIVE';
+                    usersList[creatorIndex].passwordHash = creatorHash;
+                }
+
+                this.state.users = usersList;
+                this.saveUsers();
+            }
+
+            saveSettings() {
+                localStorage.setItem('sp_settings', JSON.stringify(this.state.settings));
+            }
+            saveCategories() {
+                localStorage.setItem('sp_categories', JSON.stringify(this.state.categories));
+            }
+            saveTutorials() {
+                localStorage.setItem('sp_tutorials', JSON.stringify(this.state.tutorials));
+            }
+            saveLogs() {
+                localStorage.setItem('sp_logs', JSON.stringify(this.state.logs));
+            }
+            saveUsers() {
+                localStorage.setItem('sp_users', JSON.stringify(this.state.users));
+            }
+
+            addLog(action, details = '') {
+                const userName = this.state.currentUser 
+                    ? `${this.state.currentUser.name} ${this.state.currentUser.surname}`
+                    : 'Invitado/Sistema';
+                const newLog = {
+                    id: 'log-' + Date.now(),
+                    timestamp: new Date().toLocaleString(),
+                    user: userName,
+                    action: action + (details ? ` (${details})` : '')
+                };
+                this.state.logs.unshift(newLog);
+                if (this.state.logs.length > 200) this.state.logs.pop();
+                this.saveLogs();
+            }
+
+            checkSession() {
+                const sessionUser = sessionStorage.getItem('sp_session_user');
+                if (sessionUser) {
+                    const userObj = JSON.parse(sessionUser);
+                    // verify against latest stored users
+                    const currentInDb = this.state.users.find(u => u.id === userObj.id);
+                    if (currentInDb && currentInDb.status === 'ACTIVE') {
+                        this.state.currentUser = currentInDb;
+                        this.state.currentView = 'app';
+                    } else {
+                        sessionStorage.removeItem('sp_session_user');
+                        this.state.currentUser = null;
+                        this.state.currentView = 'login';
+                    }
+                } else {
+                    this.state.currentView = 'login';
+                }
+            }
+
+            // TOAST NOTIFICATIONS
+            showToast(message, type = 'info') {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                const colors = {
+                    success: 'bg-emerald-600 text-white border-emerald-500',
+                    error: 'bg-red-600 text-white border-red-500',
+                    info: 'bg-brand-600 text-white border-brand-500',
+                    amber: 'bg-amber-600 text-white border-amber-500'
+                };
+                const icons = {
+                    success: 'fa-circle-check',
+                    error: 'fa-circle-exclamation',
+                    info: 'fa-circle-info',
+                    amber: 'fa-triangle-exclamation'
+                };
+
+                toast.className = `p-4 rounded-xl shadow-xl border flex items-center gap-3 transition-all transform translate-y-2 opacity-0 text-sm font-medium pointer-events-auto ${colors[type] || colors.info}`;
+                toast.innerHTML = `
+                    <i class="fa-solid ${icons[type] || icons.info} text-lg"></i>
+                    <span class="flex-1">${message}</span>
+                    <button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                `;
+
+                container.appendChild(toast);
+                setTimeout(() => {
+                    toast.classList.remove('translate-y-2', 'opacity-0');
+                }, 10);
+
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }, 4000);
+            }
+
+            // CUSTOM CONFIRMATION MODAL
+            confirmAction(title, message, onConfirm) {
+                const modal = document.getElementById('confirm-modal');
+                document.getElementById('confirm-title').textContent = title;
+                document.getElementById('confirm-msg').textContent = message;
+
+                const cancelBtn = document.getElementById('confirm-cancel-btn');
+                const actionBtn = document.getElementById('confirm-action-btn');
+
+                const cleanup = () => {
+                    modal.classList.add('hidden');
+                    cancelBtn.onclick = null;
+                    actionBtn.onclick = null;
+                };
+
+                cancelBtn.onclick = cleanup;
+                actionBtn.onclick = () => {
+                    cleanup();
+                    onConfirm();
+                };
+
+                modal.classList.remove('hidden');
+            }
+
+            // AUTHENTICATION LOGIC
+            async login(name, surname, password) {
+                const cleanName = name.trim().toUpperCase();
+                const cleanSurname = surname.trim().toUpperCase();
+
+                if (!cleanName || !cleanSurname || !password) {
+                    this.showToast('Por favor, completa todos los campos para continuar.', 'amber');
+                    return;
+                }
+
+                const hashedPass = await hashString(password);
+                const foundUser = this.state.users.find(u => 
+                    u.name.trim().toUpperCase() === cleanName &&
+                    u.surname.trim().toUpperCase() === cleanSurname
+                );
+
+                if (!foundUser) {
+                    this.showToast('Usuario no registrado o credenciales incorrectas.', 'error');
+                    return;
+                }
+
+                if (foundUser.passwordHash !== hashedPass) {
+                    this.showToast('Contraseña incorrecta. Inténtalo de nuevo.', 'error');
+                    return;
+                }
+
+                if (foundUser.status === 'SUSPENDED') {
+                    this.showToast('Tu cuenta se encuentra temporalmente suspendida. Contacta al creador.', 'amber');
+                    return;
+                }
+
+                if (foundUser.status === 'BLOCKED') {
+                    this.showToast('Tu cuenta ha sido bloqueada por violación de políticas.', 'error');
+                    return;
+                }
+
+                this.state.currentUser = foundUser;
+                sessionStorage.setItem('sp_session_user', JSON.stringify(foundUser));
+                this.addLog('Inicio de Sesión Exitoso', `Usuario: ${foundUser.name} ${foundUser.surname}`);
+                this.showToast(`Bienvenido/a, ${foundUser.name}!`, 'success');
+                this.state.currentView = 'app';
+                this.state.appTab = 'library';
+                this.render();
+            }
+
+            async register(name, surname, phone, password, confirmPass) {
+                if (!name || !surname || !phone || !password || !confirmPass) {
+                    this.showToast('Todos los campos son obligatorios.', 'amber');
+                    return;
+                }
+
+                if (password !== confirmPass) {
+                    this.showToast('Las contraseñas no coinciden.', 'error');
+                    return;
+                }
+
+                if (password.length < 6) {
+                    this.showToast('La contraseña debe tener al menos 6 caracteres.', 'amber');
+                    return;
+                }
+
+                const cleanPhone = phone.replace(/\D/g, '');
+                if (cleanPhone.length < 6) {
+                    this.showToast('Ingresa un número de teléfono válido.', 'amber');
+                    return;
+                }
+
+                // Check duplicate phone
+                const phoneExists = this.state.users.some(u => u.phone.replace(/\D/g, '') === cleanPhone);
+                if (phoneExists) {
+                    this.showToast('Ya existe un usuario registrado con este número de teléfono.', 'error');
+                    return;
+                }
+
+                const passHash = await hashString(password);
+                const newUser = {
+                    id: 'usr-' + Date.now(),
+                    name: name.trim().toUpperCase(),
+                    surname: surname.trim().toUpperCase(),
+                    phone: cleanPhone,
+                    passwordHash: passHash,
+                    role: 'USER',
+                    status: 'ACTIVE',
+                    permissions: {
+                        canUploadMedia: false,
+                        canCreateTutorials: false,
+                        canEditTutorials: false,
+                        canManageCategories: false
+                    },
+                    createdAt: new Date().toISOString().split('T')[0]
+                };
+
+                this.state.users.push(newUser);
+                this.saveUsers();
+                this.addLog('Nuevo Registro de Usuario', `Nombre: ${newUser.name} ${newUser.surname}, Teléfono: ${newUser.phone}`);
+                this.showToast('Registro completado con éxito. Ahora puedes iniciar sesión.', 'success');
+                this.state.currentView = 'login';
+                this.render();
+            }
+
+            verifyRecoveryPhone(phone) {
+                const cleanPhone = phone.replace(/\D/g, '');
+                const user = this.state.users.find(u => u.phone.replace(/\D/g, '') === cleanPhone);
+
+                if (!user) {
+                    this.showToast('No se encontró ninguna cuenta asociada a este número de teléfono.', 'error');
+                    return;
+                }
+
+                this.state.forgotPhone = cleanPhone;
+                this.state.forgotStep = 2;
+                this.render();
+            }
+
+            async resetPassword(newPass, confirmPass) {
+                if (!newPass || !confirmPass) {
+                    this.showToast('Completa ambos campos de contraseña.', 'amber');
+                    return;
+                }
+                if (newPass !== confirmPass) {
+                    this.showToast('Las contraseñas no coinciden.', 'error');
+                    return;
+                }
+                if (newPass.length < 6) {
+                    this.showToast('La contraseña debe tener al menos 6 caracteres.', 'amber');
+                    return;
+                }
+
+                const userIndex = this.state.users.findIndex(u => u.phone.replace(/\D/g, '') === this.state.forgotPhone);
+                if (userIndex === -1) {
+                    this.showToast('Ocurrió un error al verificar el usuario.', 'error');
+                    this.state.forgotStep = 1;
+                    this.render();
+                    return;
+                }
+
+                const newHash = await hashString(newPass);
+                this.state.users[userIndex].passwordHash = newHash;
+                this.saveUsers();
+
+                this.addLog('Recuperación de Contraseña', `Usuario: ${this.state.users[userIndex].name} ${this.state.users[userIndex].surname}`);
+                this.showToast('Contraseña actualizada correctamente. Procede a iniciar sesión.', 'success');
+                this.state.forgotStep = 1;
+                this.state.currentView = 'login';
+                this.render();
+            }
+
+            logout() {
+                sessionStorage.removeItem('sp_session_user');
+                this.state.currentUser = null;
+                this.state.currentView = 'login';
+                this.showToast('Sesión cerrada correctamente.', 'info');
+                this.render();
+            }
+
+            checkCreatorBypass() {
+                if (this.state.currentUser && this.state.currentUser.role === 'CREATOR') {
+                    document.getElementById('maintenance-screen').classList.add('hidden');
+                    this.state.currentView = 'app';
+                    this.state.appTab = 'creator_panel';
+                    this.render();
+                } else {
+                    this.showToast('Solo el Creador Principal puede acceder durante el mantenimiento.', 'error');
+                }
+            }
+
+            // CREATOR ADMIN ACTIONS
+            toggleMaintenanceMode() {
+                if (!this.state.currentUser || this.state.currentUser.role !== 'CREATOR') return;
+
+                const newStatus = !this.state.settings.maintenanceMode;
+                this.state.settings.maintenanceMode = newStatus;
+                this.saveSettings();
+
+                this.addLog('Cambio de Modo Mantenimiento', `Mantenimiento ${newStatus ? 'ACTIVADO' : 'DESACTIVADO'}`);
+                this.showToast(`Modo Mantenimiento ${newStatus ? 'ACTIVADO' : 'DESACTIVADO'}`, newStatus ? 'amber' : 'success');
+                this.render();
+            }
+
+            setUserStatus(userId, newStatus) {
+                if (!this.state.currentUser || this.state.currentUser.role !== 'CREATOR') return;
+                const target = this.state.users.find(u => u.id === userId);
+                if (!target) return;
+
+                if (target.role === 'CREATOR') {
+                    this.showToast('El Creador Principal no puede ser modificado ni bloqueado.', 'error');
+                    return;
+                }
+
+                target.status = newStatus;
+                this.saveUsers();
+                this.addLog(`Estado de usuario cambiado a ${newStatus}`, `Usuario: ${target.name} ${target.surname}`);
+                this.showToast(`Usuario ${target.name} ${target.surname} marcado como ${newStatus}.`, 'info');
+                this.render();
+            }
+
+            deleteUser(userId) {
+                if (!this.state.currentUser || this.state.currentUser.role !== 'CREATOR') return;
+                const target = this.state.users.find(u => u.id === userId);
+                if (!target) return;
+
+                if (target.role === 'CREATOR') {
+                    this.showToast('No es posible eliminar la cuenta del Creador Principal.', 'error');
+                    return;
+                }
+
+                this.confirmAction(
+                    'Eliminar Cuenta de Usuario',
+                    `¿Estás seguro de que deseas eliminar permanentemente a ${target.name} ${target.surname}?`,
+                    () => {
+                        this.state.users = this.state.users.filter(u => u.id !== userId);
+                        this.saveUsers();
+                        this.addLog('Eliminación de Usuario', `Usuario: ${target.name} ${target.surname}`);
+                        this.showToast('Usuario eliminado correctamente.', 'success');
+                        this.render();
+                    }
+                );
+            }
+
+            setUserRoleAndPermissions(userId, role, permissions) {
+                if (!this.state.currentUser || this.state.currentUser.role !== 'CREATOR') return;
+                const target = this.state.users.find(u => u.id === userId);
+                if (!target) return;
+
+                if (target.role === 'CREATOR') {
+                    this.showToast('No puedes alterar el rol del Creador Principal.', 'error');
+                    return;
+                }
+
+                target.role = role;
+                target.permissions = { ...target.permissions, ...permissions };
+                this.saveUsers();
+                this.addLog('Actualización de Permisos y Rol', `Usuario: ${target.name} ${target.surname}, Rol: ${role}`);
+                this.showToast('Permisos y rol actualizados correctamente.', 'success');
+                this.render();
+            }
+
+            // BACKUP IMPORT / EXPORT
+            exportBackup() {
+                const data = {
+                    settings: this.state.settings,
+                    categories: this.state.categories,
+                    tutorials: this.state.tutorials,
+                    users: this.state.users,
+                    logs: this.state.logs,
+                    exportDate: new Date().toISOString()
+                };
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `backup_solucionar_problemas_${Date.now()}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                this.addLog('Exportación de Copia de Seguridad', 'Descarga de JSON de respaldo');
+                this.showToast('Copia de seguridad exportada con éxito.', 'success');
+            }
+
+            importBackup(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const parsed = JSON.parse(e.target.result);
+                        if (parsed.users && parsed.tutorials && parsed.categories) {
+                            this.state.settings = parsed.settings || this.state.settings;
+                            this.state.categories = parsed.categories || this.state.categories;
+                            this.state.tutorials = parsed.tutorials || this.state.tutorials;
+                            this.state.users = parsed.users || this.state.users;
+                            this.state.logs = parsed.logs || this.state.logs;
+
+                            this.saveSettings();
+                            this.saveCategories();
+                            this.saveTutorials();
+                            this.saveUsers();
+                            this.saveLogs();
+
+                            this.addLog('Restauración de Copia de Seguridad', 'Importación completa desde JSON');
+                            this.showToast('Copia de seguridad restaurada correctamente.', 'success');
+                            this.render();
+                        } else {
+                            this.showToast('El archivo JSON de respaldo es inválido o está dañado.', 'error');
+                        }
+                    } catch (err) {
+                        this.showToast('Error al procesar el archivo JSON.', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            // CATEGORY MANAGEMENT
+            addCategory(newCategoryName) {
+                const clean = newCategoryName.trim();
+                if (!clean) {
+                    this.showToast('Escribe un nombre de categoría válido.', 'amber');
+                    return;
+                }
+
+                if (this.state.categories.some(c => c.toLowerCase() === clean.toLowerCase())) {
+                    this.showToast('Esta categoría ya existe.', 'amber');
+                    return;
+                }
+
+                this.state.categories.push(clean);
+                this.saveCategories();
+                this.addLog('Nueva Categoría Creada', clean);
+                this.showToast(`Categoría "${clean}" agregada.`, 'success');
+                this.render();
+            }
+
+            deleteCategory(catName) {
+                this.confirmAction(
+                    'Eliminar Categoría',
+                    `¿Eliminar la categoría "${catName}"? Los tutoriales asignados permanecerán intactos.`,
+                    () => {
+                        this.state.categories = this.state.categories.filter(c => c !== catName);
+                        this.saveCategories();
+                        this.addLog('Categoría Eliminada', catName);
+                        this.showToast(`Categoría "${catName}" eliminada.`, 'info');
+                        this.render();
+                    }
+                );
+            }
+
+            // TUTORIAL MANAGEMENT
+            saveTutorialFromForm(formData) {
+                const canCreate = this.canPerform('canCreateTutorials');
+                const canEdit = this.canPerform('canEditTutorials');
+
+                if (formData.id) {
+                    if (!canEdit) {
+                        this.showToast('No tienes permiso para editar tutoriales.', 'error');
+                        return;
+                    }
+                    const index = this.state.tutorials.findIndex(t => t.id === formData.id);
+                    if (index !== -1) {
+                        this.state.tutorials[index] = { ...this.state.tutorials[index], ...formData };
+                        this.showToast('Tutorial actualizado con éxito.', 'success');
+                        this.addLog('Tutorial Editado', formData.title);
+                    }
+                } else {
+                    if (!canCreate) {
+                        this.showToast('No tienes permiso para crear tutoriales.', 'error');
+                        return;
+                    }
+                    const newTut = {
+                        ...formData,
+                        id: 'tut-' + Date.now(),
+                        author: `${this.state.currentUser.name} ${this.state.currentUser.surname}`,
+                        createdAt: new Date().toISOString().split('T')[0]
+                    };
+                    this.state.tutorials.unshift(newTut);
+                    this.showToast('Nuevo tutorial publicado con éxito.', 'success');
+                    this.addLog('Nuevo Tutorial Creado', newTut.title);
+                }
+
+                this.saveTutorials();
+                this.state.appTab = 'library';
+                this.state.editingTutorialId = null;
+                this.render();
+            }
+
+            deleteTutorial(tutId) {
+                if (!this.canPerform('canEditTutorials')) {
+                    this.showToast('No tienes permisos suficientes.', 'error');
+                    return;
+                }
+
+                const tut = this.state.tutorials.find(t => t.id === tutId);
+                if (!tut) return;
+
+                this.confirmAction(
+                    'Eliminar Tutorial',
+                    `¿Estás seguro de eliminar el tutorial "${tut.title}"?`,
+                    () => {
+                        this.state.tutorials = this.state.tutorials.filter(t => t.id !== tutId);
+                        this.saveTutorials();
+                        this.addLog('Tutorial Eliminado', tut.title);
+                        this.showToast('Tutorial eliminado.', 'info');
+                        this.render();
+                    }
+                );
+            }
+
+            toggleTutorialVisibility(tutId) {
+                if (!this.canPerform('canEditTutorials')) {
+                    this.showToast('No tienes permisos suficientes.', 'error');
+                    return;
+                }
+
+                const tut = this.state.tutorials.find(t => t.id === tutId);
+                if (!tut) return;
+
+                tut.status = tut.status === 'VISIBLE' ? 'HIDDEN' : 'VISIBLE';
+                this.saveTutorials();
+                this.addLog('Cambio de Visibilidad de Tutorial', `${tut.title} -> ${tut.status}`);
+                this.showToast(`Tutorial ahora marcado como ${tut.status === 'VISIBLE' ? 'Visible' : 'Oculto'}.`, 'info');
+                this.render();
+            }
+
+            canPerform(permissionKey) {
+                if (!this.state.currentUser) return false;
+                if (this.state.currentUser.role === 'CREATOR') return true;
+                if (this.state.currentUser.role === 'HELPER' && this.state.currentUser.permissions && this.state.currentUser.permissions[permissionKey]) return true;
+                return false;
+            }
+
+            openLightbox(type, url) {
+                const modal = document.getElementById('lightbox-modal');
+                const content = document.getElementById('lightbox-content');
+
+                if (type === 'image') {
+                    content.innerHTML = `<img src="${url}" class="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl">`;
+                } else if (type === 'video') {
+                    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                        let embedUrl = url;
+                        if (url.includes('watch?v=')) {
+                            embedUrl = url.replace('watch?v=', 'embed/');
+                        } else if (url.includes('youtu.be/')) {
+                            embedUrl = url.replace('youtu.be/', 'www.youtube.com/embed/');
+                        }
+                        content.innerHTML = `<iframe src="${embedUrl}" class="w-full aspect-video rounded-xl" frameborder="0" allowfullscreen></iframe>`;
+                    } else {
+                        content.innerHTML = `<video src="${url}" controls autoplay class="max-w-full max-h-[85vh] rounded-xl shadow-2xl"></video>`;
+                    }
+                }
+                modal.classList.remove('hidden');
+            }
+
+            closeLightbox() {
+                const modal = document.getElementById('lightbox-modal');
+                const content = document.getElementById('lightbox-content');
+                modal.classList.add('hidden');
+                content.innerHTML = '';
+            }
+
+            // RENDERING VIEW MANAGERS
+            render() {
+                const root = document.getElementById('app-root');
+                const maintScreen = document.getElementById('maintenance-screen');
+
+                // Handle Maintenance Screen logic
+                if (this.state.settings.maintenanceMode) {
+                    if (!this.state.currentUser || this.state.currentUser.role !== 'CREATOR') {
+                        maintScreen.classList.remove('hidden');
+                    } else {
+                        maintScreen.classList.add('hidden');
+                    }
+                } else {
+                    maintScreen.classList.add('hidden');
+                }
+
+                if (this.state.currentView === 'login') {
+                    root.innerHTML = this.renderLoginView();
+                    return;
+                }
+
+                if (this.state.currentView === 'register') {
+                    root.innerHTML = this.renderRegisterView();
+                    return;
+                }
+
+                if (this.state.currentView === 'forgot_password') {
+                    root.innerHTML = this.renderForgotPasswordView();
+                    return;
+                }
+
+                if (this.state.currentView === 'app') {
+                    root.innerHTML = this.renderMainAppView();
+                    this.attachDynamicAppEvents();
+                }
+            }
+
+            // LOGIN VIEW
+            renderLoginView() {
+                return `
+                    <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-brand-950 to-slate-900">
+                        <div class="glass-panel max-w-md w-full rounded-3xl p-8 shadow-2xl border border-slate-800">
+                            <div class="text-center mb-8">
+                                <div class="w-16 h-16 rounded-2xl bg-brand-600/20 text-brand-500 border border-brand-500/30 flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg shadow-brand-600/20">
+                                    <i class="fa-solid fa-headset"></i>
+                                </div>
+                                <h1 class="text-2xl font-black text-white tracking-tight">Solucionar problemas de sistema</h1>
+                                <p class="text-xs text-slate-400 mt-1">Plataforma Profesional de Diagnóstico y Tutoriales Informáticos</p>
+                            </div>
+
+                            <form onsubmit="event.preventDefault(); app.login(this.name.value, this.surname.value, this.password.value)" class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Nombre</label>
+                                    <div class="relative">
+                                        <i class="fa-solid fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                        <input type="text" name="name" required placeholder="Ingresa tu nombre" class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Apellido</label>
+                                    <div class="relative">
+                                        <i class="fa-solid fa-id-card absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                        <input type="text" name="surname" required placeholder="Ingresa tu apellido" class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Contraseña</label>
+                                        <button type="button" onclick="app.state.currentView = 'forgot_password'; app.render();" class="text-xs text-brand-400 hover:text-brand-300 hover:underline">¿Olvidaste tu contraseña?</button>
+                                    </div>
+                                    <div class="relative">
+                                        <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                        <input type="password" name="password" required placeholder="••••••••" class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm transition shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2 mt-6">
+                                    <i class="fa-solid fa-right-to-bracket"></i> Iniciar Sesión
+                                </button>
+                            </form>
+
+                            <div class="mt-8 pt-6 border-t border-slate-800/80 text-center">
+                                <p class="text-xs text-slate-400 mb-3">¿Aún no tienes una cuenta registrada?</p>
+                                <button onclick="app.state.currentView = 'register'; app.render();" class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm transition border border-slate-700">
+                                    Crear Cuenta Nueva
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // REGISTER VIEW
+            renderRegisterView() {
+                return `
+                    <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-brand-950 to-slate-900">
+                        <div class="glass-panel max-w-md w-full rounded-3xl p-8 shadow-2xl border border-slate-800 my-8">
+                            <div class="text-center mb-6">
+                                <h2 class="text-2xl font-black text-white tracking-tight">Registro de Usuario</h2>
+                                <p class="text-xs text-slate-400 mt-1">Completa tus datos para crear tu cuenta en la plataforma</p>
+                            </div>
+
+                            <form onsubmit="event.preventDefault(); app.register(this.name.value, this.surname.value, this.phone.value, this.password.value, this.confirmPassword.value)" class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Nombre</label>
+                                    <input type="text" name="name" required placeholder="Tu nombre" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Apellido</label>
+                                    <input type="text" name="surname" required placeholder="Tu apellido" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Número de Teléfono</label>
+                                    <div class="relative">
+                                        <i class="fa-solid fa-phone absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                        <input type="tel" name="phone" required placeholder="Ej: 0981123456" class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500">
+                                    </div>
+                                    <p class="text-[10px] text-slate-500 mt-1">Este número se utilizará para la verificación y recuperación de cuenta.</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Contraseña</label>
+                                    <input type="password" name="password" required placeholder="Mínimo 6 caracteres" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Confirmar Contraseña</label>
+                                    <input type="password" name="confirmPassword" required placeholder="Repite tu contraseña" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm transition shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2 mt-6">
+                                    <i class="fa-solid fa-user-plus"></i> Registrarse e Iniciar
+                                </button>
+                            </form>
+
+                            <div class="mt-6 pt-4 border-t border-slate-800 text-center">
+                                <button onclick="app.state.currentView = 'login'; app.render();" class="text-xs text-slate-400 hover:text-white transition">
+                                    <i class="fa-solid fa-arrow-left"></i> Volver al Inicio de Sesión
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // FORGOT PASSWORD VIEW
+            renderForgotPasswordView() {
+                if (this.state.forgotStep === 1) {
+                    return `
+                        <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-brand-950 to-slate-900">
+                            <div class="glass-panel max-w-md w-full rounded-3xl p-8 shadow-2xl border border-slate-800">
+                                <div class="text-center mb-6">
+                                    <div class="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-2xl mx-auto mb-3">
+                                        <i class="fa-solid fa-shield-keyhole"></i>
+                                    </div>
+                                    <h2 class="text-xl font-bold text-white">Recuperar Contraseña</h2>
+                                    <p class="text-xs text-slate-400 mt-1">Paso 1: Verifica tu identidad ingresando tu número de teléfono registrado.</p>
+                                </div>
+
+                                <form onsubmit="event.preventDefault(); app.verifyRecoveryPhone(this.phone.value)" class="space-y-4">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Teléfono Registrado</label>
+                                        <div class="relative">
+                                            <i class="fa-solid fa-phone absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                            <input type="tel" name="phone" required placeholder="Número de teléfono de tu cuenta" class="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-500">
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm transition shadow-lg shadow-amber-600/30 flex items-center justify-center gap-2">
+                                        Verificar Número <i class="fa-solid fa-arrow-right"></i>
+                                    </button>
+                                </form>
+
+                                <div class="mt-6 pt-4 border-t border-slate-800 text-center">
+                                    <button onclick="app.state.currentView = 'login'; app.render();" class="text-xs text-slate-400 hover:text-white transition">
+                                        Cancelar y Volver
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-brand-950 to-slate-900">
+                        <div class="glass-panel max-w-md w-full rounded-3xl p-8 shadow-2xl border border-slate-800">
+                            <div class="text-center mb-6">
+                                <h2 class="text-xl font-bold text-white">Paso 2: Nueva Contraseña</h2>
+                                <p class="text-xs text-slate-400 mt-1">Ingresa tu nueva clave para actualizar el acceso a tu cuenta.</p>
+                            </div>
+
+                            <form onsubmit="event.preventDefault(); app.resetPassword(this.newPass.value, this.confirmPass.value)" class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Nueva Contraseña</label>
+                                    <input type="password" name="newPass" required placeholder="Mínimo 6 caracteres" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Confirmar Nueva Contraseña</label>
+                                    <input type="password" name="confirmPass" required placeholder="Repite la nueva clave" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-brand-500">
+                                </div>
+
+                                <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-floppy-disk"></i> Guardar Cambios e Iniciar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // MAIN APP VIEW & NAVBAR
+            renderMainAppView() {
+                const user = this.state.currentUser;
+                const isCreator = user.role === 'CREATOR';
+                const isHelper = user.role === 'HELPER';
+
+                return `
+                    <div class="flex-1 flex flex-col min-h-screen bg-slate-950">
+                        <!-- HEADER / NAVBAR -->
+                        <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 py-3 flex items-center justify-between">
+                            <div class="flex items-center gap-3 cursor-pointer" onclick="app.state.appTab = 'library'; app.render();">
+                                <div class="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center text-xl shadow-lg shadow-brand-600/30">
+                                    <i class="fa-solid fa-headset"></i>
+                                </div>
+                                <div>
+                                    <h1 class="font-extrabold text-white text-base sm:text-lg leading-tight">Solucionar problemas</h1>
+                                    <p class="text-[10px] text-slate-400 font-medium">SISTEMA DE SOPORTE INFORMÁTICO</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2 sm:gap-4">
+                                ${isCreator ? `
+                                    <button onclick="app.state.appTab = 'creator_panel'; app.render();" class="px-3.5 py-2 rounded-xl ${this.state.appTab === 'creator_panel' ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'} text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+                                        <i class="fa-solid fa-user-shield text-amber-400"></i>
+                                        <span class="hidden sm:inline">Panel Creador</span>
+                                    </button>
+                                ` : ''}
+
+                                ${this.canPerform('canCreateTutorials') ? `
+                                    <button onclick="app.openTutorialEditor();" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm">
+                                        <i class="fa-solid fa-plus"></i>
+                                        <span class="hidden sm:inline">Nuevo Tutorial</span>
+                                    </button>
+                                ` : ''}
+
+                                <div class="h-6 w-px bg-slate-800"></div>
+
+                                <div class="flex items-center gap-3">
+                                    <div class="text-right hidden sm:block">
+                                        <div class="text-xs font-bold text-white flex items-center gap-1.5 justify-end">
+                                            ${user.name} ${user.surname}
+                                            ${isCreator ? '<span class="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30">CREADOR</span>' : ''}
+                                            ${isHelper ? '<span class="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">AYUDANTE</span>' : ''}
+                                        </div>
+                                        <span class="text-[10px] text-slate-400">Tel: ${user.phone}</span>
+                                    </div>
+
+                                    <button onclick="app.logout()" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-red-600/20 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/30 flex items-center justify-center transition" title="Cerrar Sesión">
+                                        <i class="fa-solid fa-right-from-bracket"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
+
+                        <!-- DYNAMIC MAIN CONTENT -->
+                        <main class="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
+                            ${this.renderAppTabContent()}
+                        </main>
+
+                        <!-- FOOTER -->
+                        <footer class="bg-slate-900/50 border-t border-slate-800 py-6 px-4 text-center text-xs text-slate-500">
+                            <p>Solucionar problemas de sistema &copy; 2026. Todos los derechos reservados. Creado por Delfi Fabian Martinez.</p>
+                        </footer>
+                    </div>
+                `;
+            }
+
+            renderAppTabContent() {
+                if (this.state.appTab === 'creator_panel') {
+                    return this.renderCreatorPanel();
+                }
+                if (this.state.appTab === 'tutorial_detail') {
+                    return this.renderTutorialDetail();
+                }
+                if (this.state.appTab === 'tutorial_editor') {
+                    return this.renderTutorialEditor();
+                }
+                return this.renderSolutionLibrary();
+            }
+
+            // SOLUTION LIBRARY VIEW
+            renderSolutionLibrary() {
+                const visibleTutorials = this.state.tutorials.filter(t => {
+                    const isVisible = (t.status === 'VISIBLE') || (this.state.currentUser && this.state.currentUser.role === 'CREATOR');
+                    const matchesCategory = this.state.selectedCategory === 'ALL' || t.category === this.state.selectedCategory;
+                    const query = this.state.searchQuery.toLowerCase();
+                    const matchesSearch = !query || 
+                        t.title.toLowerCase().includes(query) || 
+                        t.description.toLowerCase().includes(query) ||
+                        t.steps.some(s => s.title.toLowerCase().includes(query) || s.content.toLowerCase().includes(query));
+                    return isVisible && matchesCategory && matchesSearch;
+                });
+
+                return `
+                    <div class="space-y-6">
+                        <!-- BANNER & SEARCH -->
+                        <div class="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 bg-gradient-to-r from-slate-900 via-brand-950 to-slate-900 relative overflow-hidden">
+                            <div class="max-w-2xl">
+                                <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">¿Qué problema deseas solucionar hoy?</h2>
+                                <p class="text-xs sm:text-sm text-slate-400 mb-6">Explora nuestra biblioteca interactiva de procedimientos paso a paso organizados por categorías.</p>
+                                
+                                <div class="relative">
+                                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-base"></i>
+                                    <input type="text" id="library-search-input" value="${this.state.searchQuery}" placeholder="Buscar soluciones (ej. Excel, Windows 11, DNS, Word)..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition shadow-inner">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CATEGORY CHIPS -->
+                        <div class="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                            <button onclick="app.state.selectedCategory = 'ALL'; app.render();" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${this.state.selectedCategory === 'ALL' ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800 hover:text-white'}">
+                                Todas (${this.state.tutorials.length})
+                            </button>
+                            ${this.state.categories.map(cat => `
+                                <button onclick="app.state.selectedCategory = '${cat}'; app.render();" class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${this.state.selectedCategory === cat ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800 hover:text-white'}">
+                                    ${cat}
+                                </button>
+                            `).join('')}
+                        </div>
+
+                        <!-- TUTORIALS GRID -->
+                        ${visibleTutorials.length === 0 ? `
+                            <div class="text-center py-16 glass-panel rounded-3xl border border-slate-800">
+                                <i class="fa-solid fa-folder-open text-4xl text-slate-600 mb-3"></i>
+                                <h3 class="text-base font-bold text-slate-300">No se encontraron soluciones</h3>
+                                <p class="text-xs text-slate-500 mt-1">Intenta ajustar tu búsqueda o seleccionar otra categoría.</p>
+                            </div>
+                        ` : `
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                ${visibleTutorials.map(tut => `
+                                    <div class="glass-panel rounded-2xl p-6 border border-slate-800/80 hover:border-brand-500/40 transition flex flex-col justify-between group shadow-lg">
+                                        <div>
+                                            <div class="flex items-center justify-between gap-2 mb-3">
+                                                <span class="px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-bold">
+                                                    ${tut.category}
+                                                </span>
+                                                ${tut.status === 'HIDDEN' ? `
+                                                    <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[9px] font-semibold">OCULTO</span>
+                                                ` : ''}
+                                            </div>
+
+                                            <h3 class="text-base font-bold text-white group-hover:text-brand-400 transition mb-2 line-clamp-2">
+                                                ${tut.title}
+                                            </h3>
+
+                                            <p class="text-xs text-slate-400 line-clamp-3 mb-4 leading-relaxed">
+                                                ${tut.description || 'Sin descripción general.'}
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <div class="flex items-center justify-between text-[11px] text-slate-500 mb-4 pt-3 border-t border-slate-800">
+                                                <span><i class="fa-solid fa-layer-group text-slate-600"></i> ${tut.steps.length} pasos</span>
+                                                <span><i class="fa-solid fa-user text-slate-600"></i> ${tut.author}</span>
+                                            </div>
+
+                                            <div class="flex items-center gap-2">
+                                                <button onclick="app.viewTutorial('${tut.id}')" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-brand-600 text-slate-200 hover:text-white text-xs font-semibold transition flex items-center justify-center gap-2">
+                                                    Ver Solución <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                                </button>
+
+                                                ${this.canPerform('canEditTutorials') ? `
+                                                    <button onclick="app.editTutorial('${tut.id}')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs transition" title="Editar Tutorial">
+                                                        <i class="fa-solid fa-pen-to-square"></i>
+                                                    </button>
+                                                    <button onclick="app.toggleTutorialVisibility('${tut.id}')" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-amber-600/20 text-amber-400 text-xs transition" title="Cambiar Visibilidad">
+                                                        <i class="fa-solid ${tut.status === 'VISIBLE' ? 'fa-eye' : 'fa-eye-slash'}"></i>
+                                                    </button>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                `;
+            }
+
+            // TUTORIAL DETAIL VIEW
+            viewTutorial(tutId) {
+                const tut = this.state.tutorials.find(t => t.id === tutId);
+                if (!tut) return;
+                this.state.selectedTutorial = tut;
+                this.state.appTab = 'tutorial_detail';
+                this.render();
+            }
+
+            renderTutorialDetail() {
+                const tut = this.state.selectedTutorial;
+                if (!tut) return '';
+
+                return `
+                    <div class="max-w-4xl mx-auto space-y-6">
+                        <button onclick="app.state.appTab = 'library'; app.render();" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-semibold transition flex items-center gap-2">
+                            <i class="fa-solid fa-arrow-left"></i> Volver a la Biblioteca
+                        </button>
+
+                        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-6">
+                            <div>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="px-3 py-1 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-bold">
+                                        ${tut.category}
+                                    </span>
+                                    <span class="text-xs text-slate-500">• Publicado por ${tut.author} (${tut.createdAt})</span>
+                                </div>
+                                <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">${tut.title}</h1>
+                                ${tut.description ? `<p class="text-sm text-slate-300 mt-3 leading-relaxed">${tut.description}</p>` : ''}
+                            </div>
+
+                            <div class="space-y-6 pt-6 border-t border-slate-800">
+                                <h3 class="text-base font-bold text-slate-200 flex items-center gap-2">
+                                    <i class="fa-solid fa-list-check text-brand-500"></i> Pasos para solucionar el problema:
+                                </h3>
+
+                                ${tut.steps.map((step, idx) => `
+                                    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800/80 bg-slate-900/60 space-y-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="w-8 h-8 rounded-xl bg-brand-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-md">
+                                                ${idx + 1}
+                                            </span>
+                                            <h4 class="text-base font-bold text-white">
+                                                ${step.title || `Paso ${idx + 1}`}
+                                            </h4>
+                                        </div>
+
+                                        ${step.content ? `
+                                            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed pl-11">${step.content}</p>
+                                        ` : ''}
+
+                                        <!-- MEDIA CONTENT -->
+                                        <div class="pl-11 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            ${step.image ? `
+                                                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-800" onclick="app.openLightbox('image', '${step.image}')">
+                                                    <img src="${step.image}" class="w-full h-48 object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/600x400/1e293b/94a3b8?text=Imagen+no+disponible'">
+                                                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1">
+                                                        <i class="fa-solid fa-magnifying-glass-plus"></i> Ampliar Imagen
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+
+                                            ${step.video ? `
+                                                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-800 bg-slate-950 flex flex-col items-center justify-center h-48 p-4" onclick="app.openLightbox('video', '${step.video}')">
+                                                    <div class="w-12 h-12 rounded-full bg-brand-600 text-white flex items-center justify-center text-xl shadow-lg mb-2">
+                                                        <i class="fa-solid fa-play"></i>
+                                                    </div>
+                                                    <span class="text-xs font-medium text-slate-300">Reproducir Video Tutorial</span>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // TUTORIAL EDITOR VIEW
+            openTutorialEditor(tutId = null) {
+                this.state.editingTutorialId = tutId;
+                this.state.appTab = 'tutorial_editor';
+                this.render();
+            }
+
+            renderTutorialEditor() {
+                const isEditing = !!this.state.editingTutorialId;
+                const existing = isEditing ? this.state.tutorials.find(t => t.id === this.state.editingTutorialId) : null;
+
+                const defaultSteps = existing ? existing.steps : [
+                    { title: 'Primer paso', content: '', image: '', video: '' },
+                    { title: 'Segundo paso', content: '', image: '', video: '' },
+                    { title: 'Tercer paso', content: '', image: '', video: '' }
+                ];
+
+                return `
+                    <div class="max-w-3xl mx-auto space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-2xl font-bold text-white">${isEditing ? 'Editar Tutorial' : 'Publicar Nuevo Tutorial'}</h2>
+                            <button onclick="app.state.appTab = 'library'; app.render();" class="px-3.5 py-1.5 rounded-xl bg-slate-800 text-xs text-slate-300 font-medium hover:bg-slate-700">
+                                Cancelar
+                            </button>
+                        </div>
+
+                        <form id="tutorial-form" onsubmit="event.preventDefault(); app.handleTutorialSubmit(this);" class="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-6">
+                            <input type="hidden" name="id" value="${existing ? existing.id : ''}">
+
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Título del Tutorial *</label>
+                                <input type="text" name="title" required value="${existing ? existing.title : ''}" placeholder="Ej: Solucionar error de fórmulas en Excel" class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-brand-500">
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Categoría *</label>
+                                    <select name="category" required class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-brand-500">
+                                        ${this.state.categories.map(cat => `
+                                            <option value="${cat}" ${existing && existing.category === cat ? 'selected' : ''}>${cat}</option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Estado de Publicación</label>
+                                    <select name="status" class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-brand-500">
+                                        <option value="VISIBLE" ${existing && existing.status === 'VISIBLE' ? 'selected' : ''}>Visible para todos</option>
+                                        <option value="HIDDEN" ${existing && existing.status === 'HIDDEN' ? 'selected' : ''}>Oculto (Borrador)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Descripción General del Problema (Opcional)</label>
+                                <textarea name="description" rows="2" placeholder="Resumen breve del problema que resuelve..." class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-brand-500">${existing ? existing.description : ''}</textarea>
+                            </div>
+
+                            <!-- DYNAMIC STEPS BUILDER -->
+                            <div class="pt-6 border-t border-slate-800 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-sm font-bold text-slate-200">Pasos de la Solución</h3>
+                                    <button type="button" onclick="app.addStepToForm()" class="px-3 py-1.5 rounded-xl bg-brand-600/20 text-brand-400 border border-brand-500/30 text-xs font-semibold hover:bg-brand-600 hover:text-white transition">
+                                        <i class="fa-solid fa-plus"></i> + Agregar Paso
+                                    </button>
+                                </div>
+
+                                <div id="steps-container" class="space-y-4">
+                                    ${defaultSteps.map((step, idx) => this.renderStepFormGroup(step, idx)).join('')}
+                                </div>
+                            </div>
+
+                            <div class="pt-6 border-t border-slate-800 flex justify-end gap-3">
+                                <button type="button" onclick="app.state.appTab = 'library'; app.render();" class="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700">
+                                    Cancelar
+                                </button>
+                                <button type="submit" class="px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-600/30 flex items-center gap-2">
+                                    <i class="fa-solid fa-floppy-disk"></i> Guardar Tutorial
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+            }
+
+            renderStepFormGroup(step = {}, idx = 0) {
+                return `
+                    <div class="step-group p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3 relative">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-brand-400">Paso ${idx + 1}</span>
+                            <button type="button" onclick="this.closest('.step-group').remove()" class="text-red-400 hover:text-red-300 text-xs" title="Eliminar paso">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+
+                        <input type="text" name="step_title_${idx}" value="${step.title || ''}" placeholder="Título del paso (ej. Primer paso: Abrir panel)" class="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none">
+
+                        <textarea name="step_content_${idx}" rows="2" placeholder="Instrucción explicativa escrita..." class="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none">${step.content || ''}</textarea>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Imagen (URL o subir de dispositivo)</label>
+                                <input type="text" name="step_image_${idx}" value="${step.image || ''}" placeholder="https://..." class="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-[11px]">
+                                <input type="file" accept="image/*" onchange="app.handleFileUpload(event, 'step_image_${idx}')" class="mt-1 text-[10px] text-slate-400">
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Video (URL / YouTube / archivo)</label>
+                                <input type="text" name="step_video_${idx}" value="${step.video || ''}" placeholder="URL o YouTube link..." class="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-[11px]">
+                                <input type="file" accept="video/*" onchange="app.handleFileUpload(event, 'step_video_${idx}')" class="mt-1 text-[10px] text-slate-400">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            addStepToForm() {
+                const container = document.getElementById('steps-container');
+                const idx = container.querySelectorAll('.step-group').length;
+                const div = document.createElement('div');
+                div.innerHTML = this.renderStepFormGroup({ title: `Paso ${idx + 1}` }, idx);
+                container.appendChild(div.firstElementChild);
+            }
+
+            handleFileUpload(event, targetInputName) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const form = document.getElementById('tutorial-form');
+                    const targetInput = form.querySelector(`[name="${targetInputName}"]`);
+                    if (targetInput) {
+                        targetInput.value = e.target.result;
+                        this.showToast('Archivo multimedia cargado.', 'success');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            handleTutorialSubmit(form) {
+                const id = form.id.value;
+                const title = form.title.value;
+                const category = form.category.value;
+                const status = form.status.value;
+                const description = form.description.value;
+
+                const stepGroups = form.querySelectorAll('.step-group');
+                const steps = [];
+
+                stepGroups.forEach((group, idx) => {
+                    const stepTitle = group.querySelector(`[name^="step_title_"]`)?.value || '';
+                    const stepContent = group.querySelector(`[name^="step_content_"]`)?.value || '';
+                    const stepImage = group.querySelector(`[name^="step_image_"]`)?.value || '';
+                    const stepVideo = group.querySelector(`[name^="step_video_"]`)?.value || '';
+
+                    if (stepTitle || stepContent || stepImage || stepVideo) {
+                        steps.push({ title: stepTitle, content: stepContent, image: stepImage, video: stepVideo });
+                    }
+                });
+
+                if (steps.length === 0) {
+                    this.showToast('Agrega al menos un paso con contenido al tutorial.', 'amber');
+                    return;
+                }
+
+                this.saveTutorialFromForm({ id, title, category, status, description, steps });
+            }
+
+            // PRIVATE CREATOR PANEL
+            renderCreatorPanel() {
+                if (this.state.currentUser.role !== 'CREATOR') {
+                    return `
+                        <div class="text-center py-12 text-red-400 font-bold">
+                            Acceso denegado. Panel exclusivo para el Creador Principal.
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="space-y-6">
+                        <!-- ADMIN PANEL HEADER -->
+                        <div class="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div>
+                                <h2 class="text-xl font-black text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-user-gear text-amber-400"></i> Panel de Control del Creador
+                                </h2>
+                                <p class="text-xs text-slate-400 mt-1">Administración global de usuarios, permisos, tutoriales, mantenimiento y respaldo del sistema.</p>
+                            </div>
+
+                            <div class="flex items-center gap-3">
+                                <button onclick="app.toggleMaintenanceMode()" class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md ${this.state.settings.maintenanceMode ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}">
+                                    <i class="fa-solid fa-power-off"></i>
+                                    Mantenimiento: ${this.state.settings.maintenanceMode ? 'ACTIVADO' : 'DESACTIVADO'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- PANEL TABS -->
+                        <div class="flex border-b border-slate-800 gap-2 overflow-x-auto pb-1">
+                            <button onclick="app.state.creatorTab = 'users'; app.render();" class="px-4 py-2 text-xs font-bold rounded-t-xl transition ${this.state.creatorTab === 'users' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}">
+                                <i class="fa-solid fa-users"></i> Gestión de Usuarios (${this.state.users.length})
+                            </button>
+                            <button onclick="app.state.creatorTab = 'categories'; app.render();" class="px-4 py-2 text-xs font-bold rounded-t-xl transition ${this.state.creatorTab === 'categories' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}">
+                                <i class="fa-solid fa-tags"></i> Categorías (${this.state.categories.length})
+                            </button>
+                            <button onclick="app.state.creatorTab = 'logs'; app.render();" class="px-4 py-2 text-xs font-bold rounded-t-xl transition ${this.state.creatorTab === 'logs' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}">
+                                <i class="fa-solid fa-clock-rotate-left"></i> Registros de Auditoría
+                            </button>
+                            <button onclick="app.state.creatorTab = 'backup'; app.render();" class="px-4 py-2 text-xs font-bold rounded-t-xl transition ${this.state.creatorTab === 'backup' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}">
+                                <i class="fa-solid fa-database"></i> Copia de Seguridad
+                            </button>
+                        </div>
+
+                        <!-- SUBTAB CONTENT -->
+                        ${this.renderCreatorSubtab()}
+                    </div>
+                `;
+            }
+
+            renderCreatorSubtab() {
+                const tab = this.state.creatorTab;
+
+                if (tab === 'categories') {
+                    return `
+                        <div class="glass-panel p-6 rounded-3xl border border-slate-800 space-y-6">
+                            <h3 class="text-base font-bold text-white">Administrar Categorías Informáticas</h3>
+
+                            <form onsubmit="event.preventDefault(); app.addCategory(this.catName.value); this.reset();" class="flex gap-3 max-w-md">
+                                <input type="text" name="catName" placeholder="Nombre de nueva categoría..." class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none">
+                                <button type="submit" class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold">
+                                    + Agregar
+                                </button>
+                            </form>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-4 border-t border-slate-800">
+                                ${this.state.categories.map(cat => `
+                                    <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-medium text-slate-200">
+                                        <span><i class="fa-solid fa-folder text-brand-500 mr-2"></i> ${cat}</span>
+                                        <button onclick="app.deleteCategory('${cat}')" class="text-slate-500 hover:text-red-400 transition" title="Eliminar Categoría">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (tab === 'logs') {
+                    return `
+                        <div class="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+                            <h3 class="text-base font-bold text-white">Historial de Auditoría y Acciones del Sistema</h3>
+
+                            <div class="max-h-96 overflow-y-auto custom-scrollbar space-y-2">
+                                ${this.state.logs.map(log => `
+                                    <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-slate-500 font-mono text-[10px]">${log.timestamp}</span>
+                                            <span class="font-bold text-slate-200">${log.user}:</span>
+                                            <span class="text-slate-300">${log.action}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (tab === 'backup') {
+                    return `
+                        <div class="glass-panel p-6 rounded-3xl border border-slate-800 space-y-6">
+                            <div>
+                                <h3 class="text-base font-bold text-white mb-1">Copias de Seguridad del Sistema</h3>
+                                <p class="text-xs text-slate-400">Exporta la base de datos completa en formato JSON o restaura un respaldo guardado previamente.</p>
+                            </div>
+
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <button onclick="app.exportBackup()" class="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20">
+                                    <i class="fa-solid fa-download"></i> Exportar Copia de Seguridad (JSON)
+                                </button>
+
+                                <label class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-2 cursor-pointer border border-slate-700">
+                                    <i class="fa-solid fa-upload"></i> Restaurar Copia de Seguridad
+                                    <input type="file" accept=".json" onchange="app.importBackup(event)" class="hidden">
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // DEFAULT SUBTAB: USERS MANAGEMENT
+                return `
+                    <div class="glass-panel p-6 rounded-3xl border border-slate-800 space-y-6">
+                        <!-- USER SEARCH & FILTERS -->
+                        <div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                            <div class="relative w-full sm:w-80">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                                <input type="text" id="user-search-input" oninput="app.renderCreatorPanelUserFilter(this.value)" placeholder="Buscar usuario por nombre/apellido..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none">
+                            </div>
+
+                            <div class="text-xs text-slate-400">
+                                Total registrados: <span class="font-bold text-white">${this.state.users.length}</span>
+                            </div>
+                        </div>
+
+                        <!-- USERS TABLE -->
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="w-full text-left text-xs text-slate-300">
+                                <thead class="bg-slate-900/90 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                                    <tr>
+                                        <th class="p-3">Usuario</th>
+                                        <th class="p-3">Teléfono</th>
+                                        <th class="p-3">Rol</th>
+                                        <th class="p-3">Estado</th>
+                                        <th class="p-3">Permisos de Ayudante</th>
+                                        <th class="p-3 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-body" class="divide-y divide-slate-800/60">
+                                    ${this.state.users.map(u => this.renderUserTableRow(u)).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderUserTableRow(u) {
+                const isCreator = u.role === 'CREATOR';
+                const isHelper = u.role === 'HELPER';
+
+                const statusBadges = {
+                    ACTIVE: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ACTIVO</span>',
+                    SUSPENDED: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">SUSPENDIDO</span>',
+                    BLOCKED: '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">BLOQUEADO</span>'
+                };
+
+                return `
+                    <tr class="hover:bg-slate-900/40 transition">
+                        <td class="p-3 font-semibold text-white">
+                            ${u.name} ${u.surname}
+                        </td>
+                        <td class="p-3 text-slate-400 font-mono">${u.phone}</td>
+                        <td class="p-3">
+                            <select onchange="app.setUserRoleAndPermissions('${u.id}', this.value, {})" ${isCreator ? 'disabled' : ''} class="bg-slate-900 border border-slate-700 text-xs rounded px-2 py-1 text-slate-200">
+                                <option value="USER" ${u.role === 'USER' ? 'selected' : ''}>Usuario</option>
+                                <option value="HELPER" ${u.role === 'HELPER' ? 'selected' : ''}>Ayudante</option>
+                                ${isCreator ? '<option value="CREATOR" selected>Creador</option>' : ''}
+                            </select>
+                        </td>
+                        <td class="p-3">${statusBadges[u.status] || u.status}</td>
+                        <td class="p-3">
+                            ${isHelper ? `
+                                <div class="flex flex-wrap gap-2 text-[10px]">
+                                    <label class="flex items-center gap-1">
+                                        <input type="checkbox" ${u.permissions?.canUploadMedia ? 'checked' : ''} onchange="app.setUserRoleAndPermissions('${u.id}', 'HELPER', { canUploadMedia: this.checked })"> Fotos/Videos
+                                    </label>
+                                    <label class="flex items-center gap-1">
+                                        <input type="checkbox" ${u.permissions?.canCreateTutorials ? 'checked' : ''} onchange="app.setUserRoleAndPermissions('${u.id}', 'HELPER', { canCreateTutorials: this.checked })"> Crear Tutorial
+                                    </label>
+                                    <label class="flex items-center gap-1">
+                                        <input type="checkbox" ${u.permissions?.canEditTutorials ? 'checked' : ''} onchange="app.setUserRoleAndPermissions('${u.id}', 'HELPER', { canEditTutorials: this.checked })"> Editar Tutorial
+                                    </label>
+                                </div>
+                            ` : '<span class="text-slate-600">N/A</span>'}
+                        </td>
+                        <td class="p-3 text-right">
+                            ${!isCreator ? `
+                                <div class="flex items-center justify-end gap-1">
+                                    <button onclick="app.setUserStatus('${u.id}', 'ACTIVE')" class="px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white text-[10px] font-bold" title="Activar">
+                                        Activar
+                                    </button>
+                                    <button onclick="app.setUserStatus('${u.id}', 'SUSPENDED')" class="px-2 py-1 rounded bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white text-[10px] font-bold" title="Suspender">
+                                        Suspender
+                                    </button>
+                                    <button onclick="app.setUserStatus('${u.id}', 'BLOCKED')" class="px-2 py-1 rounded bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white text-[10px] font-bold" title="Bloquear">
+                                        Bloquear
+                                    </button>
+                                    <button onclick="app.deleteUser('${u.id}')" class="p-1.5 rounded bg-slate-800 hover:bg-red-600/30 text-slate-400 hover:text-red-400" title="Eliminar">
+                                        <i class="fa-solid fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            ` : '<span class="text-amber-400 text-[10px] font-bold">Protegido</span>'}
+                        </td>
+                    </tr>
+                `;
+            }
+
+            renderCreatorPanelUserFilter(query) {
+                const tbody = document.getElementById('users-table-body');
+                if (!tbody) return;
+
+                const q = query.toLowerCase();
+                const filtered = this.state.users.filter(u => 
+                    u.name.toLowerCase().includes(q) || u.surname.toLowerCase().includes(q) || u.phone.includes(q)
+                );
+
+                tbody.innerHTML = filtered.map(u => this.renderUserTableRow(u)).join('');
+            }
+
+            attachDynamicAppEvents() {
+                const searchInput = document.getElementById('library-search-input');
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        this.state.searchQuery = e.target.value;
+                        this.render();
+                    });
+                }
+            }
+        }
+
+        // INITIALIZE APPLICATION
+        let app;
+        window.onload = function() {
+            app = new AppSystem();
+        };
+    </script>
+</body>
+</html>

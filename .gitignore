@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.vercel/
+backups/
+data/
+android/.gradle/
+android/app/build/
+android/build/
+android/keystore.properties
+*.jks
+*.keystore

@@ -1,0 +1,8 @@
+{
+  "name": "Solucionar problemas de sistema",
+  "description": "Plataforma profesional minimalista de diagnóstico técnico, videotutoriales paso a paso, control de usuarios y alertas en tiempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
